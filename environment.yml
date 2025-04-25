@@ -11,3 +11,4 @@ dependencies:
   - tqdm
   - pandas
   - transformers
+  - huggingface_hub
