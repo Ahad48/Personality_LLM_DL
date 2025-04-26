@@ -57,18 +57,27 @@ class EncoderDecoder(nn.Module):
         return out
     
     @torch.no_grad()
-    def generate_text(self, encoder_input ,personality, tokenizer):
-
+    def generate_text(self, encoder_input ,personality, tokenizer, temperature = 0.7, top_k = 100):
+        self.eval()
         decoder_input = torch.tensor(self.pad_idx, device=self.device).repeat(encoder_input.shape[0], self.max_length)          #used as an temporary variable to keep track of predicted tokens
         decoder_input[:,0] = self.sos_idx
         # print(decoder_input.shape)
-        for t in range(self.max_length):
+        for t in range(self.max_length-1):
             output = self.forward(encoder_input, decoder_input, personality)
-            output = output[:,t] # B, 1, vocab_size
+            logits = output[:,t,:] # B, 1, vocab_size
+            logits = logits/temperature
+
+            top_k_logits, top_k_indices = torch.topk(logits, top_k)
+            soft_max_probs = F.softmax(top_k_logits, dim = -1)
+            new_token = top_k_indices.gather(1, torch.multinomial(soft_max_probs,1)).squeeze(-1)
             # print(outputs.shape)
             # print(outputs.argmax(-1).shape)
+            new_token[new_token==self.sos_idx]=self.pad_idx
             if(t<self.max_length-1):
-                decoder_input[:,t+1] = output.argmax(-1) 
+                # decoder_input[:,t+1] = output.argmax(-1)
+                decoder_input[:,t+1] = new_token
+                # print(new_token)
+ 
 
         decoder_input = tokenizer.decode(decoder_input.tolist()[0])
         return decoder_input

@@ -2,6 +2,7 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader, Dataset
 import pandas as pd
+from tqdm.notebook import tqdm
 
 
 def find_backend():
@@ -49,52 +50,93 @@ class PersonalityTextDataset(Dataset):
         seq_len = len(tokens)
 
         
-        for i in range(0, self.max_lenth):
+        for i in range(0, seq_len-1):
             # add a sliding window to all the tokens
             if self.context_window+i < seq_len - 1:
                 encoder_input = tokens[i:self.context_window+i]
                 # shiftign the output by 1 and using is as expected output
-                expected_output = tokens[i+1:self.context_window+1]
+                expected_output = tokens[i+1:self.context_window+i+1]
             
             else:
-                encoder_input = tokens[i:-1]
-                expected_output = tokens[-1:]
-
                 
-        # decoder input would be random tokens
-        # decoder_input = torch.randint(0,self.tokenizer.vocab_size - 1 , encoder_input.shape)
-        # decoder_input[0] = self.sos_token
+                encoder_input = tokens[i:-1]
+                expected_output = tokens[i+1:]
 
-        self.processed_data.append({
-                'encoder_input': self.tokenizer.encode(encoder_input, add_special_tokens = True),
-                'expected_output': self.tokenizer.encode(expected_output, add_special_tokens = True),
-                'personality': personality
-            })
+            # encoder_input = self.tokenizer.encode(encoder_input, add_special_tokens = True)
+            # print(encoder_input)
+            # print(expected_output)
+            # print()
+            self.processed_data.append({
+                    'encoder_input': self.tokenizer.encode(encoder_input, add_special_tokens = True),
+                    'expected_output': self.tokenizer.encode(expected_output, add_special_tokens = True),
+                    'personality': personality
+                })
         
     def process_df(self):
-        self.df.apply(lambda x: self.process_text(x.text, x.personality), axis = 1)
+        self.df.apply(lambda x: self.process_text(x['text'], x['personality']), axis = 1)
 
-def align_batch_data(batch_seq, max_length, pad_token):
-    def pad_and_get_item(key_val):
-        seq = [x['key_val'] for x in batch_seq]
-        seq = torch.nn.utils.rnn.pad_sequence(seq, batch_first=True, padding_value=pad_token)
+def align_batch_data(batch_seq, max_length, pad_token, device):
+    def pad_and_get_item(key_val, convert = True):
+        if convert:
+            seq = [torch.tensor(x[key_val]) for x in batch_seq]
+        else:
+            seq = [x[key_val] for x in batch_seq]
+        padded_seq = torch.nn.utils.rnn.pad_sequence(seq, batch_first=True, padding_value=pad_token)
+
+        return padded_seq
+    
 
     encoder_inputs = pad_and_get_item('encoder_input')
     expected_outputs = pad_and_get_item('expected_output')
-    personalities = pad_and_get_item('personality')
-
+    personalities = pad_and_get_item('personality', convert=False) # no need to convert personality to tensor as already a tensor
     final_dict = {
-        'encoder_input':encoder_inputs,
-        'expected_output':expected_outputs,
-        'personality':personalities
+        'encoder_input':encoder_inputs.to(device),
+        'expected_output':expected_outputs.to(device),
+        'personality':personalities.to(device)
     }
     return final_dict
 
-
+def create_batch_data(df, tokenizer, batch_size, max_length, context_window = None, pad_token = 0, sos_token=101, device = 'mps'):
     
+    data_obj = PersonalityTextDataset(df, tokenizer, max_length, context_window, sos_token)
 
+    data_loader = DataLoader(data_obj, batch_size, True, collate_fn = lambda x: align_batch_data(x, max_length, pad_token, device = device))
+
+    return data_loader
+
+def train(model, data_loader, optimizer, criterion , device):
+    model.train()
+    total_loss = 0
+    for data in (t_bar:= tqdm(data_loader, desc = "Train Set", leave=False)):
+        
+        out = model(data["encoder_input"], data['expected_output'], data['personality'])
+        out = out.reshape(-1, out.shape[-1])
+        
+        optimizer.zero_grad()
+        loss = criterion(out, data['expected_output'].reshape(-1))
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
+        optimizer.step()
+
+        total_loss+=loss.item()
+
+        t_bar.set_postfix_str(f'Current Perplexity: {torch.exp(loss)}')
+
+    return total_loss, total_loss/len(data_loader)
+
+def eval_model(model, data_loader, criterion, device):
     
+    model.eval()
+    with torch.no_grad():
+        total_loss = 0
+        for data in tqdm(data_loader,desc = "Eval Set", leave=False):
+            out = model(data["encoder_input"], data['expected_output'], data['personality'])
+            out = out.reshape(-1, out.shape[-1])
+            loss = criterion(out, data['expected_output'].reshape(-1))
 
+            total_loss += loss.item()
+
+    return total_loss, total_loss/len(data_loader)
 
     
         
