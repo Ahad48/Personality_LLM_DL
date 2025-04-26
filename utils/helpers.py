@@ -46,7 +46,7 @@ class PersonalityTextDataset(Dataset):
         if not isinstance(personality, torch.Tensor):
             personality = torch.tensor(personality)
 
-        tokens = self.tokenizer.tokenize(text)
+        tokens = self.tokenizer.encode(text, add_special_tokens = False)
         seq_len = len(tokens)
 
         
@@ -67,8 +67,8 @@ class PersonalityTextDataset(Dataset):
             # print(expected_output)
             # print()
             self.processed_data.append({
-                    'encoder_input': self.tokenizer.encode(encoder_input, add_special_tokens = True),
-                    'expected_output': self.tokenizer.encode(expected_output, add_special_tokens = True),
+                    'encoder_input': [self.sos_token] + encoder_input + [self.tokenizer.sep_token_id],
+                    'expected_output': [self.sos_token] + expected_output + [self.tokenizer.sep_token_id],
                     'personality': personality
                 })
         
