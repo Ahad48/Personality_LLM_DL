@@ -4,7 +4,7 @@ import torch.nn.functional as F
 
 class EncoderDecoder(nn.Module):
     def __init__(self, vocab_size, device, hidden_dim=128, num_heads=2,
-                 dim_feedforward=2048, num_layers_enc=2, num_layers_dec=2, dropout=0.2, max_length=43, p_tags=5,ignore_index = 1):
+                 dim_feedforward=2048, num_layers_enc=2, num_layers_dec=2, dropout=0.2, max_length=43, p_tags=5,ignore_index = 1, sos_index = 101):
         super(EncoderDecoder, self).__init__()
 
         self.num_heads = num_heads
@@ -16,6 +16,7 @@ class EncoderDecoder(nn.Module):
         self.device = device
         self.p_tags = p_tags
         self.pad_idx=ignore_index
+        self.sos_idx = sos_index
 
         self.transformer_layer = nn.Transformer(hidden_dim, num_heads, num_layers_enc, num_layers_dec, dim_feedforward, dropout, batch_first=True)
         
@@ -54,3 +55,22 @@ class EncoderDecoder(nn.Module):
         out = self.final_linear_layer(out)
 
         return out
+    
+    @torch.no_grad()
+    def generate_text(self, encoder_input ,personality, tokenizer):
+
+        decoder_input = torch.tensor(self.pad_idx, device=self.device).repeat(encoder_input.shape[0], self.max_length)          #used as an temporary variable to keep track of predicted tokens
+        decoder_input[:,0] = self.sos_idx
+        # print(decoder_input.shape)
+        for t in range(self.max_length):
+            output = self.forward(encoder_input, decoder_input, personality)
+            output = output[:,t] # B, 1, vocab_size
+            # print(outputs.shape)
+            # print(outputs.argmax(-1).shape)
+            if(t<self.max_length-1):
+                decoder_input[:,t+1] = output.argmax(-1) 
+
+        decoder_input = tokenizer.decode(decoder_input.tolist()[0])
+        return decoder_input
+            
+            

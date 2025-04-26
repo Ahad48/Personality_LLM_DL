@@ -46,27 +46,27 @@ class PersonalityTextDataset(Dataset):
             personality = torch.tensor(personality)
 
         tokens = self.tokenizer.tokenize(text)
-        seq_len = tokens.shape[0]
+        seq_len = len(tokens)
 
-        if 1 < seq_len < self.context_window + 1:
-            # select all tokens except the last
-            encoder_input = tokens[:-1]
-            expected_output = tokens[-1:]
-
-        else:
-            for i in range(0, seq_len - self.context_window):
-                # add a sliding window to all the tokens
+        
+        for i in range(0, self.max_lenth):
+            # add a sliding window to all the tokens
+            if self.context_window+i < seq_len - 1:
                 encoder_input = tokens[i:self.context_window+i]
                 # shiftign the output by 1 and using is as expected output
                 expected_output = tokens[i+1:self.context_window+1]
+            
+            else:
+                encoder_input = tokens[i:-1]
+                expected_output = tokens[-1:]
+
                 
         # decoder input would be random tokens
-        decoder_input = torch.randint(0,self.tokenizer.vocab_size - 1 , encoder_input.shape)
-        decoder_input[0] = self.sos_token
+        # decoder_input = torch.randint(0,self.tokenizer.vocab_size - 1 , encoder_input.shape)
+        # decoder_input[0] = self.sos_token
 
         self.processed_data.append({
                 'encoder_input': self.tokenizer.encode(encoder_input, add_special_tokens = True),
-                'decoder_input': decoder_input,
                 'expected_output': self.tokenizer.encode(expected_output, add_special_tokens = True),
                 'personality': personality
             })
@@ -80,17 +80,17 @@ def align_batch_data(batch_seq, max_length, pad_token):
         seq = torch.nn.utils.rnn.pad_sequence(seq, batch_first=True, padding_value=pad_token)
 
     encoder_inputs = pad_and_get_item('encoder_input')
-    decoder_inputs = pad_and_get_item('decoder_input')
     expected_outputs = pad_and_get_item('expected_output')
     personalities = pad_and_get_item('personality')
 
     final_dict = {
-        'encoder_input':encoder_inputs, 
-        'decoder_input':decoder_inputs,
+        'encoder_input':encoder_inputs,
         'expected_output':expected_outputs,
         'personality':personalities
     }
     return final_dict
+
+
     
 
     
