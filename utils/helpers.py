@@ -23,11 +23,12 @@ def encode_text(df, tokenizer, max_length):
     return df
 
 class PersonalityTextDataset(Dataset):
-    def __init__(self, df, tokenizer, max_length, context_window=None, sos_token=101):
+    def __init__(self, df, tokenizer, max_length, context_window=None, sos_token=101, qna = False):
         self.df = df
         self.tokenizer = tokenizer
         self.max_lenth = max_length
         self.sos_token = sos_token
+        self.qna = qna
 
         # take full sentence if the window is not specified
         self.context_window = context_window if context_window != None else max_length
@@ -71,9 +72,30 @@ class PersonalityTextDataset(Dataset):
                     'expected_output': [self.sos_token] + expected_output + [self.tokenizer.sep_token_id],
                     'personality': personality
                 })
+    
+    def process_qna(self, question, answer, personality):
         
+        encoder_input = self.tokenizer.encode(question, add_special_tokens = False)
+        expected_output = self.tokenizer.encode(answer, add_special_tokens = False)
+        if not isinstance(personality, torch.Tensor):
+            personality = torch.tensor(personality)
+
+
+        self.processed_data.append(
+            {
+                'encoder_input': [self.sos_token] + encoder_input + [self.tokenizer.sep_token_id],
+                'expected_output': [self.sos_token] + expected_output + [self.tokenizer.sep_token_id],
+                'personality': personality
+            }
+        )
+
+        
+
     def process_df(self):
-        self.df.apply(lambda x: self.process_text(x['text'], x['personality']), axis = 1)
+        if self.qna:
+            self.df.apply(lambda x: self.process_qna(x['question'], x['answer'], x['personality']), axis = 1)
+        else:
+            self.df.apply(lambda x: self.process_text(x['text'], x['personality']), axis = 1)
 
 def align_batch_data(batch_seq, max_length, pad_token, device):
     def pad_and_get_item(key_val, convert = True):
@@ -96,9 +118,9 @@ def align_batch_data(batch_seq, max_length, pad_token, device):
     }
     return final_dict
 
-def create_batch_data(df, tokenizer, batch_size, max_length, context_window = None, pad_token = 0, sos_token=101, device = 'mps'):
+def create_batch_data(df, tokenizer, batch_size, max_length, qna = False, context_window = None, pad_token = 0, sos_token=101, device = 'mps'):
     
-    data_obj = PersonalityTextDataset(df, tokenizer, max_length, context_window, sos_token)
+    data_obj = PersonalityTextDataset(df, tokenizer, max_length, context_window, sos_token, qna)
 
     data_loader = DataLoader(data_obj, batch_size, True, collate_fn = lambda x: align_batch_data(x, max_length, pad_token, device = device))
 
