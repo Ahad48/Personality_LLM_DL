@@ -67,9 +67,12 @@ class EncoderDecoder(nn.Module):
             logits = output[:,t,:] # B, 1, vocab_size
             logits = logits/temperature
 
-            top_k_logits, top_k_indices = torch.topk(logits, top_k)
-            soft_max_probs = F.softmax(top_k_logits, dim = -1)
-            new_token = top_k_indices.gather(1, torch.multinomial(soft_max_probs,1)).squeeze(-1)
+            topk_logits, topk_indices = torch.topk(logits, top_k)
+            filterd = torch.full_like(logits, float(-int))
+            filterd.scatter_(1, topk_indices, topk_logits)
+            logits = F.softmax(filterd, dim=-1)
+
+            new_token = torch.multinomial(logits, num_samples=1)
             # print(outputs.shape)
             # print(outputs.argmax(-1).shape)
             new_token[new_token==self.sos_idx]=self.pad_idx
