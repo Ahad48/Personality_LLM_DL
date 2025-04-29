@@ -59,9 +59,11 @@ class DecoderModel(nn.Module):
             personality_embed = self.personality_layer(personality)
             position_emd = personality_embed + position_emd
 
+
         embeddings = position_emd + word_emd
 
-        tgt_mask = torch.triu(torch.ones(input_len, input_len, device=self.device), diagonal=1)
+        # tgt_mask = torch.triu(torch.ones(input_len, input_len, device=self.device), diagonal=1)
+        tgt_mask = nn.Transformer.generate_square_subsequent_mask(input_len).to(self.device)
         
         if attention_mask!=None:
             attention_mask = attention_mask == 0
@@ -78,13 +80,14 @@ class DecoderModel(nn.Module):
     def generate(self, input_text, personality, tokenizer, temperature = 0.7, top_k = 10, top_p = 0.9,
                  repeation_penalty = 1.2, repeat_array_len = 4):
         self.eval()
+        
+        input_text = f"Question: {input_text} \nAnswer:"
+        input_index = tokenizer(input_text, add_special_tokens = True, return_tensors = "pt")['input_ids']
+        # input_index = torch.tensor(input_index, dtype=torch.long, device=self.device)
 
-        input_index = tokenizer.encode(input_text)
-        input_index = torch.tensor(input_index, dtype=torch.long, device=self.device).unsqueeze(0)
-
-        generated = input_index
-        output_text = torch.ones((1,1), device=self.device, dtype = torch.long)
-        output_text[:] = tokenizer.cls_token_id
+        generated = input_index.to(device = self.device)
+        # output_text = torch.ones((1,1), device=self.device, dtype = torch.long)
+        # output_text[:] = tokenizer.bos_token_id
 
         recent_tokens = []
 
@@ -138,13 +141,13 @@ class DecoderModel(nn.Module):
             next_token = torch.multinomial(probs, num_samples=1)
 
             generated = torch.cat((generated, next_token), dim = 1)
-            output_text = torch.cat((output_text, next_token), dim = 1)
+            # output_text = torch.cat((output_text, next_token), dim = 1)
 
             recent_tokens.append(next_token.item())
             if len(recent_tokens)>repeat_array_len:
                 recent_tokens.pop(0)
 
-        output_text = tokenizer.decode(output_text.squeeze(0).tolist())
+        output_text = tokenizer.decode(generated.squeeze(0).tolist())
 
         self.train()
         return output_text
