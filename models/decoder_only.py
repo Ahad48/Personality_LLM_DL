@@ -21,7 +21,7 @@ class DecoderModel(nn.Module):
         self.word_embedding = nn.Embedding(vocab_size, hidden_dim)
         self.position_embedding = nn.Embedding(max_length, hidden_dim)
         self.personality_layer = nn.Sequential(
-            nn.Linear(p_tags, max_length),
+            nn.Linear(p_tags, hidden_dim),
             nn.ReLU()
         )
 
@@ -50,20 +50,22 @@ class DecoderModel(nn.Module):
         
 
         position = torch.arange(0, input_len, device=self.device).unsqueeze(0)
+        # print(position.shape)
+
+        position_emd = self.position_embedding(position)
 
         # if personality is given then train the model according to the personality
         if personality!=None:
             personality_embed = self.personality_layer(personality)
-            position = personality_embed + position
-
-        position_emd = self.position_embedding(position)
+            position_emd = personality_embed + position_emd
 
         embeddings = position_emd + word_emd
 
         tgt_mask = torch.triu(torch.ones(input_len, input_len, device=self.device), diagonal=1)
         
         if attention_mask!=None:
-            out = self.decoder(embeddings, memory = embeddings, tgt_mask = tgt_mask, attention_mask = attention_mask)
+            attention_mask = attention_mask == 0
+            out = self.decoder(embeddings, memory = embeddings, tgt_mask = tgt_mask, tgt_key_padding_mask = attention_mask)
 
         else:
             out = self.decoder(embeddings, memory = embeddings, tgt_mask = tgt_mask)

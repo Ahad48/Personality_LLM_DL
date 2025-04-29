@@ -187,10 +187,12 @@ class QNADataset(Dataset):
         input_tokens, input_mask = out['input_ids'], out['attention_mask']
 
         out = {
-            'input_token':input_tokens,
-            'input_mask': input_mask,
+            'input_token':input_tokens.squeeze(0),
+            'input_mask': input_mask.squeeze(0),
             'personality': personality
         }
+        return out
+
 
 
     def process_text(self):
