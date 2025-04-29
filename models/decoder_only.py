@@ -20,7 +20,10 @@ class DecoderModel(nn.Module):
 
         self.word_embedding = nn.Embedding(vocab_size, hidden_dim)
         self.position_embedding = nn.Embedding(max_length, hidden_dim)
-        self.personality_layer = nn.Linear(p_tags, max_length)
+        self.personality_layer = nn.Sequential(
+            nn.Linear(p_tags, max_length),
+            nn.ReLU()
+        )
 
         decoder_layer = nn.TransformerDecoderLayer(hidden_dim, num_heads, dim_feedforward, dropout, batch_first=True)
 
@@ -30,7 +33,7 @@ class DecoderModel(nn.Module):
 
         self.apply(self.init_weights)
 
-    def init_weights(seld, m):
+    def init_weights(self, m):
         ## using a similar weight initialization from resnet 
         # https://discuss.pytorch.org/t/initialising-weights-in-nn-sequential/76553/6 using this for understanding how to initialize the weights
         # using kaiming initilization as it is good for relu
@@ -39,7 +42,7 @@ class DecoderModel(nn.Module):
             if m.bias is not None:
                 nn.init.zeros_(m.bias)
 
-    def forward(self, input_text, personality = None):
+    def forward(self, input_text, personality = None, attention_mask = None):
         batch_size, input_len = input_text.size()
 
         
@@ -58,8 +61,12 @@ class DecoderModel(nn.Module):
         embeddings = position_emd + word_emd
 
         tgt_mask = torch.triu(torch.ones(input_len, input_len, device=self.device), diagonal=1)
+        
+        if attention_mask!=None:
+            out = self.decoder(embeddings, memory = embeddings, tgt_mask = tgt_mask, attention_mask = attention_mask)
 
-        out = self.decoder(embeddings, memory = embeddings, tgt_mask = tgt_mask)
+        else:
+            out = self.decoder(embeddings, memory = embeddings, tgt_mask = tgt_mask)
 
         out = self.final_layer(out)
 

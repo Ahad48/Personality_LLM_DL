@@ -3,7 +3,8 @@ import torch
 from torch.utils.data import DataLoader, Dataset
 import pandas as pd
 from tqdm.notebook import tqdm
-
+import warnings
+warnings.simplefilter(action='ignore', category=pd.errors.SettingWithCopyWarning)
 
 def find_backend():
     # if you want to default to cuda first change order.
@@ -119,10 +120,12 @@ def align_batch_data(batch_seq, max_length, pad_token, device):
     return final_dict
 
 def create_batch_data(df, tokenizer, batch_size, max_length, qna = False, context_window = None, pad_token = 0, sos_token=101, device = 'mps'):
-    
-    data_obj = PersonalityTextDataset(df, tokenizer, max_length, context_window, sos_token, qna)
-
-    data_loader = DataLoader(data_obj, batch_size, True, collate_fn = lambda x: align_batch_data(x, max_length, pad_token, device = device))
+    if qna:
+        data_obj = QNADataset(df, tokenizer, max_length, device=device)
+        data_loader = DataLoader(data_obj, batch_size, shuffle=True)
+    else:
+        data_obj = PersonalityTextDataset(df, tokenizer, max_length, context_window, sos_token)
+        data_loader = DataLoader(data_obj, batch_size, True, collate_fn = lambda x: align_batch_data(x, max_length, pad_token, device = device))
 
     return data_loader
 
@@ -160,7 +163,51 @@ def eval_model(model, data_loader, criterion, device):
 
     return total_loss, total_loss/len(data_loader)
 
-    
+class QNADataset(Dataset):
+    def __init__(self, df, tokenizer, max_length = 512,question_max_length=None, answer_max_length=None, device = 'cpu'):
+        self.df = df
+        self.tokenizer = tokenizer
+        self.max_length = max_length
+        self.q_max_length = question_max_length
+        self.a_max_length = answer_max_length
+        self.device = device
+        # self.process_text()
+
+    def __len__(self):
+        return self.df.shape[0]
+
+    # Using a similar approach for using pandas directly with pytorch dataset https://stackoverflow.com/a/74594835
+    def __getitem__(self, index):
+        question = self.df['question'].iloc[index]
+        answer = self.df['answer'].iloc[index]
+        personality = self.df['personality'].iloc[index]
+
+        input_text = f"Question: {question} \nAnswer: {answer}"
+        out = self.tokenizer(input_text, max_length=self.max_length, padding = "max_length", add_special_tokens=True, return_tensors = "pt")
+        input_tokens, input_mask = out['input_ids'], out['attention_mask']
+
+        out = {
+            'input_token':input_tokens,
+            'input_mask': input_mask,
+            'personality': personality
+        }
+
+
+    def process_text(self):
+
+        def get_tokenized_text(text, tokenizer, max_length, question = True):
+            if question:
+                text = f"Question: {text} \nAnswer:"
+
+            out = tokenizer(text, max_length=max_length, padding = "max_length", add_special_tokens=True)
+            return out['input_ids'], out['attention_mask']
+
+        self.df[['question_token', 'question_mask']] = self.df.apply(lambda x: get_tokenized_text(x['question'],
+                                                    self.tokenizer, max_length=self.q_max_length), axis = 1, result_type="expand")
+
+        self.df[['answer_token', 'answer_mask']] = self.df.apply(lambda x: get_tokenized_text(x['answer'],
+                                                    self.tokenizer, max_length=self.a_max_length, questions = False), axis = 1, result_type="expand")
+
         
 
         
