@@ -119,11 +119,16 @@ def align_batch_data(batch_seq, max_length, pad_token, device):
     }
     return final_dict
 
-def create_batch_data(df, tokenizer, batch_size, max_length, qna = False, context_window = None, pad_token = 0, sos_token=101, device = 'mps'):
+def create_batch_data(df, tokenizer, batch_size, max_length, qna = False, context_window = None, pad_token = 0, sos_token=101, device = 'mps', 
+                    model_type = "decoder_only", q_max_length = 200, a_max_length = 200):
     if qna:
-        data_obj = QNADataset(df, tokenizer, max_length, device=device)
+        if model_type=="decoder_only":
+            data_obj = QNADataset(df, tokenizer, max_length, device=device)
+        else:
+            data_obj = QNADataset(df, tokenizer, max_length, q_max_length, a_max_length, device=device, model_type="encoder_decoder")
         data_loader = DataLoader(data_obj, batch_size, shuffle=True)
     else:
+        
         data_obj = PersonalityTextDataset(df, tokenizer, max_length, context_window, sos_token)
         data_loader = DataLoader(data_obj, batch_size, True, collate_fn = lambda x: align_batch_data(x, max_length, pad_token, device = device))
 
@@ -164,13 +169,14 @@ def eval_model(model, data_loader, criterion, device):
     return total_loss, total_loss/len(data_loader)
 
 class QNADataset(Dataset):
-    def __init__(self, df, tokenizer, max_length = 512,question_max_length=None, answer_max_length=None, device = 'cpu'):
+    def __init__(self, df, tokenizer, max_length = 512,question_max_length=None, answer_max_length=None, device = 'cpu', model_type="decoder_only"):
         self.df = df
         self.tokenizer = tokenizer
         self.max_length = max_length
         self.q_max_length = question_max_length
         self.a_max_length = answer_max_length
         self.device = device
+        self.model_type = model_type
         # self.process_text()
 
     def __len__(self):
@@ -181,16 +187,28 @@ class QNADataset(Dataset):
         question = self.df['question'].iloc[index]
         answer = self.df['answer'].iloc[index]
         personality = self.df['personality'].iloc[index]
+        
+        if self.model_type == "decoder_only":
+            input_text = f"Question: {question} \nAnswer: {answer}"
+            out = self.tokenizer(input_text, max_length=self.max_length, padding = "max_length", add_special_tokens=True, return_tensors = "pt", truncation = True)
+            input_tokens, input_mask = out['input_ids'], out['attention_mask']
 
-        input_text = f"Question: {question} \nAnswer: {answer}"
-        out = self.tokenizer(input_text, max_length=self.max_length, padding = "max_length", add_special_tokens=True, return_tensors = "pt", truncation = True)
-        input_tokens, input_mask = out['input_ids'], out['attention_mask']
+            out = {
+                'input_token':input_tokens.squeeze(0).to(self.device),
+                'input_mask': input_mask.squeeze(0).to(self.device),
+                'personality': personality.to(self.device)
+            }
 
-        out = {
-            'input_token':input_tokens.squeeze(0).to(self.device),
-            'input_mask': input_mask.squeeze(0).to(self.device),
-            'personality': personality.to(self.device)
-        }
+        else:
+            input_token = self.tokenizer(question, max_length=self.q_max_length, padding = "max_length", add_special_tokens=True, return_tensors = "pt", truncation = True)
+            expected_output = self.tokenizer(answer, max_length=self.a_max_length, padding = "max_length", add_special_tokens=True, return_tensors = "pt", truncation = True)
+
+            out = {
+                'input_token':input_token['input_ids'].squeeze(0).to(self.device),
+                'expected_output': expected_output['input_ids'].squeeze(0).to(self.device),
+                'personality': personality.to(self.device)
+            }
+
         return out
 
 

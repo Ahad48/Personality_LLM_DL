@@ -43,9 +43,9 @@ class DecoderModel(nn.Module):
                 nn.init.zeros_(m.bias)
 
     def forward(self, input_text, personality = None, attention_mask = None):
-        batch_size, input_len = input_text.size()
+        batch_size, input_len = input_text.shape
 
-        
+        # print(input_text.shape)
         word_emd = self.word_embedding(input_text)
         
 
