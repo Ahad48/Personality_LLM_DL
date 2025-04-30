@@ -53,11 +53,13 @@ class DecoderModel(nn.Module):
         # print(position.shape)
 
         position_emd = self.position_embedding(position)
+        # print(position_emd.device)
 
         # if personality is given then train the model according to the personality
         if personality!=None:
             personality_embed = self.personality_layer(personality)
-            position_emd = personality_embed + position_emd
+            # print("Position size")
+            position_emd = personality_embed.unsqueeze(1) + position_emd
 
 
         embeddings = position_emd + word_emd

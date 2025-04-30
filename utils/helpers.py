@@ -183,13 +183,13 @@ class QNADataset(Dataset):
         personality = self.df['personality'].iloc[index]
 
         input_text = f"Question: {question} \nAnswer: {answer}"
-        out = self.tokenizer(input_text, max_length=self.max_length, padding = "max_length", add_special_tokens=True, return_tensors = "pt")
+        out = self.tokenizer(input_text, max_length=self.max_length, padding = "max_length", add_special_tokens=True, return_tensors = "pt", truncation = True)
         input_tokens, input_mask = out['input_ids'], out['attention_mask']
 
         out = {
-            'input_token':input_tokens.squeeze(0),
-            'input_mask': input_mask.squeeze(0),
-            'personality': personality
+            'input_token':input_tokens.squeeze(0).to(self.device),
+            'input_mask': input_mask.squeeze(0).to(self.device),
+            'personality': personality.to(self.device)
         }
         return out
 
