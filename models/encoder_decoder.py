@@ -57,29 +57,65 @@ class EncoderDecoder(nn.Module):
         return out
     
     @torch.no_grad()
-    def generate_text(self, encoder_input ,personality, tokenizer, temperature = 0.7, top_k = 100):
+    def generate(self, encoder_input ,personality, tokenizer, temperature = 0.7, top_k = 100, repeation_penalty = 1.7, repeat_array_len = 10, top_p = 0.8):
         self.eval()
+
+        encoder_input = tokenizer(encoder_input, max_length = 150, padding = "max_length", add_special_tokens = True, return_tensors = "pt", truncation = True)
+        encoder_input = encoder_input['input_ids'].to(self.device)
         decoder_input = torch.tensor(self.pad_idx, device=self.device).repeat(encoder_input.shape[0], self.max_length)          #used as an temporary variable to keep track of predicted tokens
         decoder_input[:,0] = self.sos_idx
+        recent_tokens = []
         # print(decoder_input.shape)
         for t in range(self.max_length-1):
             output = self.forward(encoder_input, decoder_input, personality)
-            logits = output[:,t,:] # B, 1, vocab_size
-            logits = logits/temperature
+            next_token_logits = output[:,t,:] # B, 1, vocab_size
 
-            topk_logits, topk_indices = torch.topk(logits, top_k)
-            filterd = torch.full_like(logits, float(-int))
-            filterd.scatter_(1, topk_indices, topk_logits)
-            logits = F.softmax(filterd, dim=-1)
+            if recent_tokens:
+                recent_tokens_tensor = torch.tensor(recent_tokens, dtype = torch.long, device = self.device)
+                penalty_tensor = torch.ones_like(next_token_logits)
+                penalty_tensor.index_fill_(1, recent_tokens_tensor, repeation_penalty)
 
-            new_token = torch.multinomial(logits, num_samples=1)
+                next_token_logits /= penalty_tensor
+
+            next_token_logits /= temperature
+            # print(torch.nansum(nex_token_logits))
+
+            if top_k>0:
+                top_k_logits, top_k_indices = torch.topk(next_token_logits, top_k)
+                filtered_logits = torch.full_like(next_token_logits, float('-inf'))
+                filtered_logits.scatter_(1, top_k_indices, top_k_logits)
+
+                next_token_logits = filtered_logits
+            
+            if top_p<1.0:
+                sorted_logits, sorted_indices = torch.sort(next_token_logits, descending=True, dim=-1)
+                sorted_prob = F.softmax(sorted_logits, dim = -1)
+
+                cumm_prob = torch.cumsum(sorted_prob, dim=-1)
+                # remove the indices where the prob>=top_p
+                remove_indices = cumm_prob > top_p
+                remove_indices[:,0] = False
+                sorted_logits[remove_indices] = float("-inf")
+
+                full_arry = torch.full_like(next_token_logits, float('-inf'), device=self.device)
+                full_arry.scatter_(1, sorted_indices, sorted_logits)
+                next_token_logits = full_arry
+            
+            probs = F.softmax(next_token_logits, dim = -1)
+            # print(_)
+            # print(probs)
+            next_token = torch.multinomial(probs, num_samples=1)
             # print(outputs.shape)
             # print(outputs.argmax(-1).shape)
-            new_token[new_token==self.sos_idx]=self.pad_idx
+
             if(t<self.max_length-1):
                 # decoder_input[:,t+1] = output.argmax(-1)
-                decoder_input[:,t+1] = new_token
+                decoder_input[:,t+1] = next_token
                 # print(new_token)
+
+            recent_tokens.append(next_token.item())
+            if len(recent_tokens)>repeat_array_len:
+                recent_tokens.pop(0)
  
 
         decoder_input = tokenizer.decode(decoder_input.tolist()[0])

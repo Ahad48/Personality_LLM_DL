@@ -189,7 +189,7 @@ class QNADataset(Dataset):
         personality = self.df['personality'].iloc[index]
         
         if self.model_type == "decoder_only":
-            input_text = f"Question: {question} \nAnswer: {answer}"
+            input_text = f"{question} <|endoftext|> {answer}"
             out = self.tokenizer(input_text, max_length=self.max_length, padding = "max_length", add_special_tokens=True, return_tensors = "pt", truncation = True)
             input_tokens, input_mask = out['input_ids'], out['attention_mask']
 
@@ -217,7 +217,7 @@ class QNADataset(Dataset):
 
         def get_tokenized_text(text, tokenizer, max_length, question = True):
             if question:
-                text = f"Question: {text} \nAnswer:"
+                text = f"{question} <|endoftext|> :"
 
             out = tokenizer(text, max_length=max_length, padding = "max_length", add_special_tokens=True)
             return out['input_ids'], out['attention_mask']
