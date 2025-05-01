@@ -1,0 +1,23 @@
+model:
+  dataset: fashionmnist # mnist   
+train:
+  batch_size: 64
+  lr: 0.0002
+  n_epochs: 5
+  num_workers: 4 # change this based on number of cores on your CPU. 4 is sufficient for 1 gpu. If unsure leave at 1.  
+network:
+  encoder_model: distilroberta-base                # keep
+  hidden_dim: 400 # used for VAE and gan
+  latent_dim: 40 # used for VAE or gan
+vae:
+  vae_recon_loss: l2  # l1 or l2
+  beta: 1
+diffusion:
+  timesteps: 400
+  noise_start: 0.0001
+  noise_end: 0.03
+optimizer:
+  type: 'adamw' # adamw or sgd
+  weight_decay: 0.0 #0.001
+gan:
+  leaky: False
