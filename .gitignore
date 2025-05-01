@@ -158,3 +158,42 @@ cython_debug/
 #  and can be added to the global gitignore or merged into this file.  For a more nuclear
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
+
+# Finetuning
+unsloth_training_checkpoints
+.profile
+.local
+.ipynb_checkpoints
+.gitconfig
+.cache
+.conda
+.ipython
+.mamba
+.ssh
+.bash_logout
+.config
+.jupyter
+.npm
+.triton
+kaggle.json
+.bashrc
+.gsutil
+.kaggle
+.nv
+.yarn
+unsloth_compiled_cache
+.viminfo
+gpt-roleplay/**
+_unsloth_temporary_saved_buffers
+gpt-roleplay
+gpt2-dialogue-generation-pytorch
+outputs
+unsloth_compiled_cache
+unsloth_training_checkpoints
+wandb
+saves/**
+.Trash-951895316/
+.docker/
+.netrc
+__pycache__/
+
